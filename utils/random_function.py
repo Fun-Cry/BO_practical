@@ -71,6 +71,5 @@ def random_function(dim_total, dim_effect):
     equation, equation_func= generate_random_equation(dim_effect)
     def func(vector):
         embedding = onb @ vector
-        print(*embedding)
         return equation_func(*embedding)
     return func
