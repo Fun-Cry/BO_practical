@@ -3,64 +3,91 @@ import numpy as np
 from utils.random_function import random_function
 from sklearn.preprocessing import PolynomialFeatures
 
-# Data generation
-D = 10
-d = 5
-num_samples = 100
-func = random_function(D, d)
+class PolynomialRegressionModel:
+    def __init__(self, input_dim, poly_degree=2, learning_rate=0.1):
+        self.poly_degree = poly_degree
+        self.poly = PolynomialFeatures(degree=self.poly_degree, include_bias=False)
+        self.model = torch.nn.Linear(input_dim, 1)
+        self.criterion = torch.nn.MSELoss()
+        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
 
-# Convert NumPy arrays to PyTorch tensors
-X = np.random.rand(num_samples, D)  # Random inputs in high-dimensional space
-y = np.array([func(x) for x in X])  # Evaluate the random function
+    def fit(self, X, y, epochs=500, verbose=True):
+        """
+        Train the polynomial regression model.
 
-# Convert to PyTorch tensors
-X = torch.tensor(X, dtype=torch.float)
-y = torch.tensor(y, dtype=torch.float)
+        Args:
+            X (np.ndarray): Input data of shape (num_samples, input_dim).
+            y (np.ndarray): Target data of shape (num_samples,).
+            epochs (int): Number of training epochs.
+            verbose (bool): Print loss every 50 epochs if True.
+        """
+        X_poly = self._transform_to_poly(X)
+        X_tensor = torch.tensor(X_poly, dtype=torch.float)
+        y_tensor = torch.tensor(y, dtype=torch.float)
 
-# Polynomial feature expansion
-poly_degree = 2  # Degree of the polynomial
-poly = PolynomialFeatures(degree=poly_degree, include_bias=False)
-X_poly = torch.tensor(poly.fit_transform(X.numpy()), dtype=torch.float)
+        for epoch in range(epochs):
+            self.model.train()
+            self.optimizer.zero_grad()
+            predictions = self.model(X_tensor).squeeze(-1)
+            loss = self.criterion(predictions, y_tensor)
+            loss.backward()
+            self.optimizer.step()
 
-# Define a simple linear regression model
-class PolynomialRegression(torch.nn.Module):
-    def __init__(self, input_dim):
-        super().__init__()
-        self.linear = torch.nn.Linear(input_dim, 1)
+            if verbose and (epoch + 1) % 50 == 0:
+                print(f"Epoch {epoch+1}/{epochs}, Loss: {loss.item():.4f}")
 
-    def forward(self, x):
-        return self.linear(x).squeeze(-1)
+    def predict(self, X, requires_grad=False):
+        """
+        Predict using the trained model.
 
-# Instantiate the model
-input_dim = X_poly.shape[1]
-model = PolynomialRegression(input_dim)
+        Args:
+            X (np.ndarray): Input data of shape (num_samples, input_dim).
+            requires_grad (bool): Whether to compute gradients for predictions.
 
-# Loss and optimizer
-criterion = torch.nn.MSELoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=0.1)
+        Returns:
+            torch.Tensor: Predictions as a differentiable tensor.
+        """
+        X_poly = self._transform_to_poly(X)
+        X_tensor = torch.tensor(X_poly, dtype=torch.float, requires_grad=requires_grad)
 
-# Training loop
-epochs = 500
-for epoch in range(epochs):
-    model.train()
-    optimizer.zero_grad()
-    output = model(X_poly)
-    loss = criterion(output, y)
-    loss.backward()
-    optimizer.step()
-    if (epoch + 1) % 50 == 0:
-        print(f"Epoch {epoch+1}/{epochs}, Loss: {loss.item():.4f}")
+        self.model.eval()
+        with torch.set_grad_enabled(requires_grad):
+            predictions = self.model(X_tensor).squeeze(-1)
 
-# Switch to evaluation mode
-model.eval()
+        return predictions
 
-# Generate test inputs with the same dimensionality as training inputs
-num_test_samples = 100
-test_X = np.random.rand(num_test_samples, D)
-test_X_poly = torch.tensor(poly.transform(test_X), dtype=torch.float)
+    def _transform_to_poly(self, X):
+        """
+        Transform input data to polynomial features.
 
-# Make predictions
-with torch.no_grad():
-    predicted_mean = model(test_X_poly)
+        Args:
+            X (np.ndarray): Input data.
 
-print("Predicted Mean:", predicted_mean)
+        Returns:
+            np.ndarray: Polynomial transformed input data.
+        """
+        return self.poly.fit_transform(X)
+
+if __name__ == "__main__":
+    # Example usage
+    D = 10  # Input dimensionality
+    d = 5  # True function dimensionality
+    num_samples = 100
+    func = random_function(D, d)
+
+    # Generate random data
+    X = np.random.rand(num_samples, D)
+    y = np.array([func(x) for x in X])
+
+    # Instantiate and train the model
+    model = PolynomialRegressionModel(input_dim=X.shape[1], poly_degree=2, learning_rate=0.1)
+    model.fit(X, y, epochs=500)
+
+    # Predict on test data
+    num_test_samples = 100
+    test_X = np.random.rand(num_test_samples, D)
+
+    # Obtain predictions with differentiability
+    predicted_mean = model.predict(test_X, requires_grad=True)
+
+    print("Predicted Mean:", predicted_mean)

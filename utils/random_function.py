@@ -72,4 +72,4 @@ def random_function(dim_total, dim_effect):
     def func(vector):
         embedding = onb @ vector
         return equation_func(*embedding)
-    return func
+    return equation, func
