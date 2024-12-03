@@ -10,7 +10,9 @@ class Experimenter:
                  dim_effect,
                  surrogate_model,
                  num_DoE,
-                 num_iters
+                 num_iters,
+                 num_samples=64,  # Default to one sample per iteration
+                 num_epochs=500    # Default to one epoch per iteration
                  ):
         self.dim_total = dim_total
         self.dim_effect = dim_effect
@@ -18,9 +20,12 @@ class Experimenter:
         self.surrogate_model = surrogate_model
         self.num_DoE = num_DoE
         self.num_iters = num_iters
+        self.num_samples = num_samples
+        self.num_epochs = num_epochs
         
         self.pnet = ProjectionNetwork(input_dim=dim_total)
-    
+        self.pnet_optimizer = torch.optim.Adam(self.pnet.parameters())
+
     def initialize_surrogate(self):
         """
         Initializes the surrogate model by generating a design of experiments (DoE)
@@ -41,44 +46,45 @@ class Experimenter:
         # Store the initial DoE samples and observations for potential reuse
         self.samples = samples
         self.observations = observations
-        
+
     def iterate(self):
         """
         Perform one iteration of training the projection network.
 
         Steps:
-        1. Randomly generate a new point in the input space.
-        2. Evaluate the surrogate model at the generated point.
-        3. Use the result to train the projection network (pnet).
+        1. Randomly generate new points in the input space.
+        2. Evaluate the surrogate model at the generated points.
+        3. Use the results to train the projection network (pnet) for a specified number of epochs.
         """
-        # Step 1: Randomly generate a new point in the input space
-        random_point = np.random.rand(1, self.dim_total)  # A single random point in [0, 1]^dim_total
+        for _ in range(self.num_epochs):
+            # Step 1: Randomly generate new points in the input space
+            random_points = np.random.rand(self.num_samples, self.dim_total)  # `num_samples` points in [0, 1]^dim_total
 
-        # Step 2: Evaluate the surrogate model at the random point
-        surrogate_value = self.surrogate_model.predict(random_point)  # Surrogate model prediction
+            # Step 2: Evaluate the surrogate model at the random points
+            surrogate_values = self.surrogate_model.predict(random_points)  # Surrogate model predictions
 
-        # Step 3: Train the projection network
-        self.pnet_optimizer.zero_grad()
+            # Step 3: Train the projection network
+            self.pnet_optimizer.zero_grad()
 
-        # Convert random_point to PyTorch tensor
-        random_point_tensor = torch.tensor(random_point, dtype=torch.float)
+            # Convert random_points to PyTorch tensor
+            random_points_tensor = torch.tensor(random_points, dtype=torch.float)
 
-        # Forward pass through the projection network
-        pnet_output = self.pnet(random_point_tensor)
+            # Forward pass through the projection network
+            pnet_outputs = self.pnet(random_points_tensor)
 
-        # Loss is the squared error between the projection output and the surrogate model value
-        surrogate_value_tensor = torch.tensor(surrogate_value, dtype=torch.float).view(-1, 1)
-        loss = torch.mean((pnet_output - surrogate_value_tensor) ** 2)
+            # Convert surrogate values to PyTorch tensor
+            surrogate_values_tensor = torch.tensor(surrogate_values, dtype=torch.float).view(-1, 1)
 
-        # Backward pass and optimization step
-        loss.backward()
-        self.pnet_optimizer.step()
+            # Loss is the squared error between the projection outputs and the surrogate model values
+            loss = torch.mean((pnet_outputs - surrogate_values_tensor) ** 2)
 
-        # Print loss (optional)
-        print(f"Iteration training loss: {loss.item():.4f}")
-        
+            # Backward pass and optimization step
+            loss.backward()
+            self.pnet_optimizer.step()
+
+            # Print loss (optional)
+            print(f"Epoch training loss: {loss.item():.4f}")
+
     def train(self):
         for _ in range(self.num_iters):
             self.iterate()
-        
-    
