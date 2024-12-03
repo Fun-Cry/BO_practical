@@ -39,14 +39,16 @@ class ProjectionNetwork(nn.Module):
     def forward(self, x):
         return self.projection_layer(x)
 
-# Example usage
-D = 4  # Dimension of the matrix and vector
-model = ProjectionNetwork(D)
 
-# Example input vector
-x = torch.randn(1, D)
+if __name__ == "__main__":
+    # Example usage
+    D = 4  # Dimension of the matrix and vector
+    model = ProjectionNetwork(D)
 
-# Forward pass
-output = model(x)
-print("Input:", x)
-print("Output:", output)
+    # Example input vector
+    x = torch.randn(1, D)
+
+    # Forward pass
+    output = model(x)
+    print("Input:", x)
+    print("Output:", output)
