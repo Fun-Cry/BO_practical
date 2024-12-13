@@ -1,34 +1,44 @@
 import torch
 import numpy as np
 from utils.random_function import random_function
-from sklearn.preprocessing import PolynomialFeatures
+
+class DifferentiablePolynomialFeatures(torch.nn.Module):
+    def __init__(self, degree):
+        super().__init__()
+        self.degree = degree
+
+    def forward(self, X):
+        poly_features = [X]
+        for deg in range(2, self.degree + 1):
+            poly_features.append(X ** deg)
+        return torch.cat(poly_features, dim=-1)
+
 
 class PolynomialRegressionModel:
     def __init__(self, input_dim, poly_degree=2, learning_rate=0.1):
         self.poly_degree = poly_degree
-        self.poly = PolynomialFeatures(degree=self.poly_degree, include_bias=False)
-        self.model = torch.nn.Linear(input_dim, 1)
+        self.poly_transform = DifferentiablePolynomialFeatures(degree=self.poly_degree)
+        self._poly_input_dim = input_dim * self.poly_degree  # Approximation for transformed dim
+
+        # Initialize model
+        self.model = torch.nn.Linear(self._poly_input_dim, 1)
         self.criterion = torch.nn.MSELoss()
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
 
     def fit(self, X, y, epochs=500, verbose=True):
-        """
-        Train the polynomial regression model.
-
-        Args:
-            X (np.ndarray): Input data of shape (num_samples, input_dim).
-            y (np.ndarray): Target data of shape (num_samples,).
-            epochs (int): Number of training epochs.
-            verbose (bool): Print loss every 50 epochs if True.
-        """
-        X_poly = self._transform_to_poly(X)
-        X_tensor = torch.tensor(X_poly, dtype=torch.float)
-        y_tensor = torch.tensor(y, dtype=torch.float)
+        # Convert data to tensors
+        X_tensor = torch.tensor(X, dtype=torch.float)
+        y_tensor = torch.tensor(y, dtype=torch.float).unsqueeze(-1)
 
         for epoch in range(epochs):
             self.model.train()
             self.optimizer.zero_grad()
-            predictions = self.model(X_tensor).squeeze(-1)
+
+            # Apply differentiable polynomial transformation
+            X_poly = self.poly_transform(X_tensor)
+            predictions = self.model(X_poly)
+
+            # Compute loss and update
             loss = self.criterion(predictions, y_tensor)
             loss.backward()
             self.optimizer.step()
@@ -36,37 +46,18 @@ class PolynomialRegressionModel:
             if verbose and (epoch + 1) % 50 == 0:
                 print(f"Epoch {epoch+1}/{epochs}, Loss: {loss.item():.4f}")
 
-    def predict(self, X, requires_grad=False):
-        """
-        Predict using the trained model.
+    def predict(self, X, requires_grad=True):
+        # Convert data to tensors
+        X_tensor = torch.tensor(X, dtype=torch.float, requires_grad=requires_grad)
 
-        Args:
-            X (np.ndarray): Input data of shape (num_samples, input_dim).
-            requires_grad (bool): Whether to compute gradients for predictions.
+        # Apply differentiable polynomial transformation
+        X_poly = self.poly_transform(X_tensor)
 
-        Returns:
-            torch.Tensor: Predictions as a differentiable tensor.
-        """
-        X_poly = self._transform_to_poly(X)
-        X_tensor = torch.tensor(X_poly, dtype=torch.float, requires_grad=requires_grad)
-
+        # Perform prediction
         self.model.eval()
-        with torch.set_grad_enabled(requires_grad):
-            predictions = self.model(X_tensor).squeeze(-1)
+        predictions = self.model(X_poly).squeeze(-1)
 
         return predictions
-
-    def _transform_to_poly(self, X):
-        """
-        Transform input data to polynomial features.
-
-        Args:
-            X (np.ndarray): Input data.
-
-        Returns:
-            np.ndarray: Polynomial transformed input data.
-        """
-        return self.poly.fit_transform(X)
 
 if __name__ == "__main__":
     # Example usage

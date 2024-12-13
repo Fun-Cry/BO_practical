@@ -26,7 +26,7 @@ def qr_basis(vectors):
         orthonormal_basis (ndarray): A (d, D) array of orthonormal basis vectors.
     """
     q, _ = np.linalg.qr(vectors.T)  # QR decomposition
-    return q.T 
+    return q 
 
 def generate_random_equation(n):
     
@@ -70,6 +70,6 @@ def random_function(dim_total, dim_effect):
     onb = qr_basis(lin_indep_sample(dim_effect, dim_total))
     equation, equation_func= generate_random_equation(dim_effect)
     def func(vector):
-        embedding = onb @ vector
+        embedding = onb.T @ vector
         return equation_func(*embedding)
-    return equation, func
+    return equation, onb, func

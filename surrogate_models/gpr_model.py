@@ -68,19 +68,12 @@ class GaussianProcessModel:
 
         self.model.eval()
         self.likelihood.eval()
+        
+        observed_pred = self.likelihood(self.model(X_tensor))
+        result = observed_pred.mean
+        
+        return result
 
-        with torch.no_grad(), gpytorch.settings.fast_pred_var():
-            observed_pred = self.likelihood(self.model(X_tensor))
-            result = {"mean": observed_pred.mean}
-
-            if return_std:
-                result["std"] = observed_pred.stddev
-
-            if return_confidence_region:
-                lower, upper = observed_pred.confidence_region()
-                result["confidence_region"] = (lower, upper)
-
-            return result
 
 
 class ExactGPModel(gpytorch.models.ExactGP):

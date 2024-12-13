@@ -42,7 +42,7 @@ class RBFNetwork:
             if verbose and (epoch + 1) % 50 == 0:
                 print(f"Epoch {epoch+1}/{epochs}, Loss: {loss.item():.4f}")
 
-    def predict(self, X, requires_grad=False):
+    def predict(self, X, requires_grad=True):
         """
         Predict using the trained RBF network.
 
@@ -56,8 +56,7 @@ class RBFNetwork:
         X_tensor = torch.tensor(X, dtype=torch.float, requires_grad=requires_grad)
 
         self.model.eval()
-        with torch.set_grad_enabled(requires_grad):
-            predictions = self.model(X_tensor)
+        predictions = self.model(X_tensor)
 
         return predictions
 

@@ -28,6 +28,24 @@ class OrthogonalParameterWithSoftRounding(nn.Module):
 
         # Apply the projection matrix UAU* to the input vector
         return x @ UAU_star.T
+    
+    def get_basis(self):
+        # Round the diagonal to strictly 0 or 1
+        diag_binary = (torch.sigmoid(self.diag) > 0.5).float()
+        
+        # Find indices of non-zero columns
+        non_zero_indices = torch.nonzero(diag_binary).squeeze()
+        if non_zero_indices.numel() < 2:  # Fewer than two non-zero columns
+            # Sort the diagonal in descending order
+            sorted_indices = torch.argsort(self.diag, descending=True)
+            
+            # Select the top two indices with the largest diagonal values
+            top_two_indices = sorted_indices[:2]
+            
+            # Use the top two indices as the basis
+            non_zero_indices = top_two_indices
+        # Return only the non-zero columns of U
+        return self.U[:, non_zero_indices]
 
 
 # Example neural network with the custom layer
@@ -38,6 +56,9 @@ class ProjectionNetwork(nn.Module):
 
     def forward(self, x):
         return self.projection_layer(x)
+    
+    def get_basis(self):
+        return self.projection_layer.get_basis()
 
 
 if __name__ == "__main__":
