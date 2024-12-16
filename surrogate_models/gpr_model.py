@@ -18,7 +18,7 @@ class GaussianProcessModel:
         self.optimizer = None
         self.mll = None
 
-    def fit(self, X, y, epochs=500, verbose=True):
+    def fit(self, X, y, epochs=1000, verbose=True):
         """
         Train the Gaussian Process model.
 

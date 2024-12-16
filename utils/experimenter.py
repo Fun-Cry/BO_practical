@@ -12,7 +12,7 @@ class Experimenter:
                  num_DoE,
                  num_iters,
                  num_samples=64,  # Default to one sample per iteration
-                 num_epochs=500    # Default to one epoch per iteration
+                 num_epochs=100    # Default to one epoch per iteration
                  ):
         self.dim_total = dim_total
         self.dim_effect = dim_effect
@@ -24,7 +24,7 @@ class Experimenter:
         self.num_epochs = num_epochs
         
         self.pnet = ProjectionNetwork(input_dim=dim_total)
-        self.pnet_optimizer = torch.optim.Adam(self.pnet.parameters())
+        self.pnet_optimizer = torch.optim.Adam(self.pnet.parameters(), lr=1e-2)
         self.criterion = torch.nn.MSELoss()
 
 
@@ -95,6 +95,7 @@ class Experimenter:
             
     def principal_angle(self):
         found_basis = self.pnet.get_basis()
+        found_dim = found_basis.shape[1]
         true_basis = torch.tensor(self.onb, dtype=torch.float)
         
         # Compute the cross-correlation matrix
@@ -108,5 +109,5 @@ class Experimenter:
         principal_angles_rad = torch.acos(torch.clamp(S, -1, 1))
         
         # Convert to degrees and return the maximum principal angle
-        return torch.rad2deg(torch.max(principal_angles_rad)).item()
+        return torch.rad2deg(torch.max(principal_angles_rad)).item(), found_dim
         
