@@ -1,0 +1,4 @@
+,,,principal_angle,principal_angle,found_dim,found_dim
+,,,mean,std,mean,std
+surrogate_model,dim_total,dim_effect,,,,
+GPRSurrogate,20,5,31.381057739257812,,17.0,

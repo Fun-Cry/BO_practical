@@ -1,108 +1,52 @@
 import torch
 import torch.nn as nn
-import torch.optim as optim
-import numpy as np
-from utils.random_function import random_function
 
-class RBFNetwork:
-    def __init__(self, num_centers, input_dim, gamma=1.0, learning_rate=0.01, epochs=1000):
-        """
-        Initializes the RBF network.
-
-        Args:
-            num_centers (int): Number of RBF centers.
-            input_dim (int): Dimensionality of the input data.
-            gamma (float): Parameter controlling the width of the RBFs.
-            learning_rate (float): Learning rate for the optimizer.
-        """
-        self.model = RBFNet(num_centers, input_dim, gamma)
-        self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
-        self.loss_fn = nn.MSELoss()
-        self.epochs = epochs
-
-    def fit(self, X, y, verbose=True):
-        """
-        Train the RBF network.
-
-        Args:
-            X (np.ndarray): Input data of shape (num_samples, input_dim).
-            y (np.ndarray): Target data of shape (num_samples,).
-            epochs (int): Number of training epochs.
-            verbose (bool): Print loss every 50 epochs if True.
-        """
-        X_tensor = torch.tensor(X, dtype=torch.float)
-        y_tensor = torch.tensor(y, dtype=torch.float).view(-1, 1)  # Ensure y is 2D
-
-        for epoch in range(self.epochs):
-            self.optimizer.zero_grad()
-            predictions = self.model(X_tensor)
-            loss = self.loss_fn(predictions, y_tensor)
-            loss.backward()
-            self.optimizer.step()
-
-            if verbose and (epoch + 1) % 50 == 0:
-                print(f"Epoch {epoch+1}/{self.epochs}, Loss: {loss.item():.4f}")
-
-    def predict(self, X, requires_grad=True):
-        """
-        Predict using the trained RBF network.
-
-        Args:
-            X (np.ndarray): Input data of shape (num_samples, input_dim).
-            requires_grad (bool): Whether to compute gradients for predictions.
-
-        Returns:
-            torch.Tensor: Predictions as a differentiable tensor.
-        """
-        X_tensor = torch.tensor(X, dtype=torch.float, requires_grad=requires_grad)
-
-        self.model.eval()
-        predictions = self.model(X_tensor)
-
-        return predictions
-
-
-class RBFNet(nn.Module):
-    def __init__(self, num_centers, input_dim, gamma=1.0):
-        super(RBFNet, self).__init__()
-        self.num_centers = num_centers
+class RBFNetwork(nn.Module):
+    def __init__(self, num_centers=10, gamma=10.0, learning_rate=1e-2, epochs=500, input_dim=None):
+        super().__init__()
+        assert input_dim is not None, "input_dim must be specified for RBFNetwork"
         self.input_dim = input_dim
+        self.num_centers = num_centers
         self.gamma = gamma
+        self.learning_rate = learning_rate
+        self.epochs = epochs
+        self.trained = False
 
-        # Centers of the RBFs (learnable parameters)
-        self.centers = nn.Parameter(torch.randn(num_centers, input_dim))
-        # Weights for the output layer
-        self.weights = nn.Parameter(torch.randn(num_centers, 1))
+    def _rbf_features(self, X, centers):
+        # X: N x D, centers: C x D
+        # Phi_ij = exp(-gamma * ||x_i - c_j||^2)
+        X = X.unsqueeze(1)     # N x 1 x D
+        C = centers.unsqueeze(0)  # 1 x C x D
+        dist_sq = torch.sum((X - C)**2, dim=-1)  # N x C
+        return torch.exp(-self.gamma * dist_sq)   # N x C
 
-    def rbf(self, x, center):
-        # Compute the RBF activation (Gaussian)
-        return torch.exp(-self.gamma * torch.sum((x - center) ** 2, dim=-1))
+    def fit(self, X, y):
+        # Randomly pick centers from data or use k-means for center initialization
+        # For simplicity, pick random subset as centers
+        # Then solve a linear least squares for output weights
+        X_t = torch.tensor(X, dtype=torch.float)
+        y_t = torch.tensor(y, dtype=torch.float).view(-1, 1)
 
-    def forward(self, x):
-        # Compute RBF activations for each center
-        activations = torch.stack([self.rbf(x, c) for c in self.centers], dim=1)
-        # Compute weighted sum of RBF activations
-        return activations @ self.weights
+        # Select centers randomly from data
+        idx = torch.randperm(X_t.size(0))[:self.num_centers]
+        centers = X_t[idx]
 
+        # Compute RBF features
+        Phi = self._rbf_features(X_t, centers)  # N x C
 
-# Example usage
-if __name__ == "__main__":
-    num_samples = 100
-    input_dim = 10
-    num_centers = 10
-    d = 5
-    D = 10
-    func = random_function(D, d)
+        # Solve linear system: w = (Phi^T Phi)^{-1} Phi^T y
+        A = Phi.T @ Phi
+        b = Phi.T @ y_t
+        w = torch.linalg.solve(A, b)  # C x 1
 
-    # Generate some synthetic data
-    X = np.random.rand(num_samples, D)
-    y = np.array([func(x) for x in X])
+        # Register buffers (no further training)
+        self.register_buffer('centers', centers)
+        self.register_buffer('weights', w)
+        self.trained = True
 
-    # Instantiate and train the RBF model
-    rbf_model = RBFNetwork(num_centers=num_centers, input_dim=input_dim, gamma=10.0, learning_rate=0.01)
-    rbf_model.fit(X, y, epochs=500)
-
-    # Predict on the training data
-    predictions = rbf_model.predict(X)
-
-    print("Predictions:", predictions)
+    def predict(self, X):
+        # X: M x D (torch.Tensor)
+        if not self.trained:
+            raise RuntimeError("Model not trained yet.")
+        Phi = self._rbf_features(X, self.centers)
+        return Phi @ self.weights

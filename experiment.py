@@ -1,140 +1,175 @@
-# test_experimenter_comprehensive.py
 import numpy as np
-import itertools
-from surrogate_models.gpr_model import GaussianProcessModel
+import torch
+import matplotlib.pyplot as plt
+import pandas as pd
+from surrogate_models.gpr_model import GPRSurrogate
 from surrogate_models.polynomial_model import PolynomialRegressionModel
 from surrogate_models.rbf_model import RBFNetwork
 from utils.experimenter import Experimenter
-import random
+import seaborn as sns
+from datetime import datetime
+import os
 
-random.seed(42)
-np.random.seed(42)
+# Set random seeds for reproducibility
+np.random.seed(21)
+torch.manual_seed(21)
 
-def run_experiment(
+def run_single_experiment(
     dim_total,
     dim_effect,
     surrogate_model_class,
-    num_runs=1,  # Number of independent runs for each configuration
-    surrogate_lr=1e-2,
-    num_surrogate_epochs=1000,
-    pnet_lr=1e-3,
-    num_pnet_epochs=1000,
+    surrogate_config,
+    experiment_config
 ):
-    # Store results
-    results = []
+    """Run a single experiment with given configuration"""
+    # Initialize surrogate model
+    surrogate_model = surrogate_model_class(**surrogate_config)
+    
+    # Create experimenter instance
+    experimenter = Experimenter(
+        dim_total=dim_total,
+        dim_effect=dim_effect,
+        surrogate_model=surrogate_model,
+        **experiment_config
+    )
+    
+    # Run experiment
+    experimenter.initialize_surrogate()
+    experimenter.train()
+    
+    # Get results
+    principal_angle, found_dim = experimenter.principal_angle()
+    
+    return {
+        'dim_total': dim_total,
+        'dim_effect': dim_effect,
+        'surrogate_model': surrogate_model_class.__name__,
+        'principal_angle': principal_angle,
+        'found_dim': found_dim
+    }
 
-        # Ensure effective dimensions are less than total dimensions
-    #     print(dim_total, dim_effect)
-    # if dim_effect >= dim_total:
-    #     continue
-    for run in range(num_runs):
-        # Instantiate the surrogate model
-        if surrogate_model_class == GaussianProcessModel:
-            surrogate_model = surrogate_model_class(input_dim=dim_total, learning_rate=surrogate_lr, epochs=num_surrogate_epochs)
-        elif surrogate_model_class == PolynomialRegressionModel:
-            surrogate_model = surrogate_model_class(input_dim=dim_total, poly_degree=2, learning_rate=surrogate_lr, epochs=num_surrogate_epochs)
-        elif surrogate_model_class == RBFNetwork:
-            surrogate_model = surrogate_model_class(num_centers=10, input_dim=dim_total, gamma=10.0, learning_rate=surrogate_lr, epochs=num_surrogate_epochs)
+def run_experiments(configs, num_runs=3):
+    """Run multiple experiments with different configurations"""
+    all_results = []
+    
+    total_experiments = len(configs) * num_runs
+    experiment_count = 0
+    
+    for config in configs:
+        for run in range(num_runs):
+            experiment_count += 1
+            print(f"\nRunning experiment {experiment_count}/{total_experiments}")
+            print(f"Configuration: {config}")
+            print(f"Run: {run + 1}/{num_runs}")
+            
+            # try:
+            result = run_single_experiment(**config)
+            result['run'] = run
+            all_results.append(result)
+            
+            print(f"Results - Principal Angle: {result['principal_angle']:.4f}, "
+                    f"Found Dimensions: {result['found_dim']}")
+            # except Exception as e:
+            #     print(f"Error in experiment: {str(e)}")
+            #     continue
+    
+    return all_results
 
-        # Create the Experimenter instance
-        experimenter = Experimenter(
-            dim_total=dim_total,
-            dim_effect=dim_effect,
-            surrogate_model=surrogate_model, # type: ignore
-            num_DoE=100,
-            num_iters=10,
-            num_samples=1000,
-            num_epochs=num_pnet_epochs,
-            lr=pnet_lr
-        )
-
-        # Run the experiment
-        experimenter.initialize_surrogate()
-        experimenter.train()
-
-        # Calculate principal angle
-        principal_angle, found_dim = experimenter.principal_angle()
-
-        # Store results
-        results.append({
-            'dim_total': dim_total,
-            'dim_effect': dim_effect,
-            'surrogate_model': surrogate_model_class.__name__,
-            'run': run,
-            'principal_angle': principal_angle,
-            'found_dim': found_dim
-        })
-
-        print(f"Experiment: total_dim={dim_total}, effect_dim={dim_effect}, ",
-                f"model={surrogate_model_class.__name__}, run={run}, ",
-                f"principal_angle={principal_angle:.4f}",
-                f"found_dim={found_dim}")
-
-    return results
-
-def analyze_results(results):
-    import pandas as pd
-
-    # Convert results to a pandas DataFrame for easier analysis
+def visualize_results(results):
+    """Create visualizations of experiment results"""
     df = pd.DataFrame(results)
-
-    # Generate clear output for each result
-    print("\nDetailed Results:")
-    for _, row in df.iterrows():
-        print(f"Total Dimensions: {row['dim_total']}, "
-              f"Principal Angle: {row['principal_angle']:.4f}, "
-              f"Found Dimensions: {row['found_dim']}")
-
-    # Aggregate results for summary
-    aggregated = df.groupby(['dim_total', 'dim_effect', 'surrogate_model'])[['principal_angle', 'found_dim']].agg(['mean', 'std'])
-
-    # Plot or further analyze the results
-    import matplotlib.pyplot as plt
-
+    
+    # Create output directory for plots
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    output_dir = f'experiment_results_{timestamp}'
+    os.makedirs(output_dir, exist_ok=True)
+    
+    # 1. Principal angle vs effective dimensions
     plt.figure(figsize=(12, 6))
-    for model in df['surrogate_model'].unique():
-        model_data = df[df['surrogate_model'] == model]
-        plt.scatter(
-            model_data['dim_effect'], 
-            model_data['principal_angle'], 
-            label=model, 
-            alpha=0.6
-        )
-
+    sns.boxplot(data=df, x='dim_effect', y='principal_angle', hue='surrogate_model')
+    plt.title('Principal Angle vs Effective Dimensions')
     plt.xlabel('Effective Dimensions')
     plt.ylabel('Principal Angle (degrees)')
-    plt.title('Principal Angle vs Effective Dimensions')
-    plt.legend()
-    plt.show()
-
-    return aggregated
-
+    plt.savefig(f'{output_dir}/principal_angle_vs_dim.png')
+    plt.close()
+    
+    # 2. Found dimensions accuracy
+    plt.figure(figsize=(12, 6))
+    sns.boxplot(data=df, x='dim_effect', y='found_dim', hue='surrogate_model')
+    plt.title('Found vs Actual Effective Dimensions')
+    plt.xlabel('True Effective Dimensions')
+    plt.ylabel('Found Dimensions')
+    plt.savefig(f'{output_dir}/found_dimensions.png')
+    plt.close()
+    
+    # 3. Summary statistics
+    summary = df.groupby(['surrogate_model', 'dim_total', 'dim_effect'])[['principal_angle', 'found_dim']].agg(['mean', 'std'])
+    summary.to_csv(f'{output_dir}/summary_statistics.csv')
+    
+    return summary
 
 if __name__ == "__main__":
-    # Define experimental parameters
-    # dim_total_list = [5, 10, 15, 20, 25]
-    # dim_effect_list = [2, 3, 4, 5]
-    dim_pairs = [(20, 5), (50, 5), (100, 10), (10, 10)]
-    surrogate_models = [
-        GaussianProcessModel, 
-        PolynomialRegressionModel, 
-        RBFNetwork
+    # Define experiment configurations
+    dimension_pairs = [
+        # (10, 2),
+        (20, 5),
+        # (50, 5),
+        # (100, 10)
     ]
-
-    # Run comprehensive experiment
     
-    results = run_experiment(
-        20, 
-        5, 
-        GaussianProcessModel,
-        surrogate_lr=1e-1,
-        num_surrogate_epochs=10,
-        pnet_lr=1e-3,
-        num_pnet_epochs=10,
-        num_runs=5
-    )
-
+    # Define model configurations
+    model_configs = {
+        GPRSurrogate: {
+            'learning_rate': 1e-2,
+            'epochs': 100
+        },
+        # PolynomialRegressionModel: {
+        #     'poly_degree': 2,
+        #     'learning_rate': 1e-2,
+        #     'epochs': 500
+        # },
+        # RBFNetwork: {
+        #     'num_centers': 10,
+        #     'gamma': 10.0,
+        #     'learning_rate': 1e-2,
+        #     'epochs': 100
+        # }
+    }
+    
+    # Define experimenter configurations
+    experiment_base_config = {
+        'num_DoE': 100,
+        'num_iters': 10,
+        'num_samples': 100,
+        'num_epochs': 100,
+        'lr': 1e-2
+    }
+    
+    # Generate all configurations
+    configs = []
+    for dim_total, dim_effect in dimension_pairs:
+        for model_class, model_config in model_configs.items():
+            surrogate_config = model_config.copy()
+            if model_class == PolynomialRegressionModel:
+                surrogate_config['input_dim'] = dim_total
+            if model_class == RBFNetwork:
+                surrogate_config['input_dim'] = dim_total
+                
+            configs.append({
+                'dim_total': dim_total,
+                'dim_effect': dim_effect,
+                'surrogate_model_class': model_class,
+                'surrogate_config': surrogate_config,
+                'experiment_config': experiment_base_config
+            })
+    
+    # Run experiments
+    print("Starting experiments...")
+    results = run_experiments(configs, num_runs=1)
+    
     # Analyze and visualize results
-    aggregated_results = analyze_results(results)
-    print("\nAggregated Results:")
-    print(aggregated_results)
+    print("\nAnalyzing results...")
+    summary = visualize_results(results)
+    
+    print("\nSummary of results:")
+    print(summary)

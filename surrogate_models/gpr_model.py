@@ -1,117 +1,52 @@
 import torch
-import gpytorch
-import numpy as np
-from utils.random_function import random_function
+import torch.nn as nn
 
-class GaussianProcessModel:
-    def __init__(self, input_dim, learning_rate=0.1, epochs=1000):
-        """
-        Initializes the Gaussian Process model.
-
-        Args:
-            input_dim (int): Dimensionality of the input data.
-            learning_rate (float): Learning rate for the optimizer.
-        """
-        self.likelihood = gpytorch.likelihoods.GaussianLikelihood()
-        self.model = None
+class GPRSurrogate(nn.Module):
+    def __init__(self, learning_rate=1e-2, epochs=500, noise=1e-6):
+        super().__init__()
         self.learning_rate = learning_rate
-        self.optimizer = None
-        self.mll = None
-        self.epochs = epochs 
+        self.epochs = epochs
+        self.noise = noise
+        self.trained = False
 
-    def fit(self, X, y, verbose=True):
+    def rbf_kernel(self, X1, X2, lengthscale=1.0):
+        # RBF kernel: K(x,x') = exp(-||x - x'||^2 / (2 * lengthscale^2))
+        # X1: N x D, X2: M x D
+        # returns N x M kernel matrix
+        X1 = X1.unsqueeze(1)  # N x 1 x D
+        X2 = X2.unsqueeze(0)  # 1 x M x D
+        dist_sq = torch.sum((X1 - X2)**2, dim=2)
+        return torch.exp(-dist_sq / (2.0 * lengthscale**2))
+
+    def fit(self, X, y):
         """
-        Train the Gaussian Process model.
-
-        Args:
-            X (np.ndarray): Input data of shape (num_samples, input_dim).
-            y (np.ndarray): Target data of shape (num_samples,).
-            epochs (int): Number of training epochs.
-            verbose (bool): Print loss every 50 epochs if True.
+        X: N x D (numpy array)
+        y: N x 1 (numpy array)
+        We'll do a simple GP fit with a fixed kernel and no hyperparameter optimization.
         """
-        X_tensor = torch.tensor(X, dtype=torch.float)
-        y_tensor = torch.tensor(y, dtype=torch.float)
+        # Convert to torch
+        X_t = torch.tensor(X, dtype=torch.float)
+        y_t = torch.tensor(y, dtype=torch.float).view(-1, 1)
 
-        # Initialize the GP model
-        self.model = ExactGPModel(X_tensor, y_tensor, self.likelihood)
-        self.optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
-        self.mll = gpytorch.mlls.ExactMarginalLogLikelihood(self.likelihood, self.model)
+        # Compute kernel matrix
+        K = self.rbf_kernel(X_t, X_t)
+        K = K + self.noise * torch.eye(len(X_t))
 
-        self.model.train()
-        self.likelihood.train()
+        # Compute alpha = K^{-1} y using Cholesky
+        L = torch.linalg.cholesky(K)
+        alpha = torch.cholesky_solve(y_t, L)
 
-        for epoch in range(self.epochs):
-            self.optimizer.zero_grad()
-            output = self.model(X_tensor)
-            loss = -self.mll(output, y_tensor)  # type: ignore # Marginal log likelihood
-            loss.backward()
-            self.optimizer.step()
+        # Store training data and alpha as parameters or buffers
+        self.register_buffer('X_train', X_t)
+        self.register_buffer('alpha', alpha)
+        self.trained = True
 
-            if verbose and (epoch + 1) % 50 == 0:
-                print(f"Epoch {epoch + 1}/{self.epochs}, Loss: {loss.item():.4f}")
+    def predict(self, X):
+        # X: M x D (torch.Tensor)
+        # Predictive mean: k(X, X_train)*alpha
+        if not self.trained:
+            raise RuntimeError("Model not trained yet.")
 
-    def predict(self, X, return_std=False, return_confidence_region=False):
-        """
-        Predict using the trained Gaussian Process model.
-
-        Args:
-            X (np.ndarray): Input data of shape (num_samples, input_dim).
-            return_std (bool): Whether to return the predictive standard deviation.
-            return_confidence_region (bool): Whether to return confidence intervals.
-
-        Returns:
-            dict: A dictionary containing the predictions and optionally the uncertainty measures.
-        """
-        if self.model is None:
-            raise ValueError("The model must be fitted before making predictions.")
-
-        X_tensor = torch.tensor(X, dtype=torch.float)
-
-        self.model.eval()
-        self.likelihood.eval()
-        
-        observed_pred = self.likelihood(self.model(X_tensor))
-        result = observed_pred.mean
-        
-        return result
-
-
-
-class ExactGPModel(gpytorch.models.ExactGP):
-    def __init__(self, train_x, train_y, likelihood):
-        super().__init__(train_x, train_y, likelihood)
-        self.mean_module = gpytorch.means.ConstantMean()
-        self.covar_module = gpytorch.kernels.ScaleKernel(
-            gpytorch.kernels.RBFKernel()
-        )
-
-    def forward(self, x):
-        mean_x = self.mean_module(x)
-        covar_x = self.covar_module(x)
-        return gpytorch.distributions.MultivariateNormal(mean_x, covar_x)
-
-if __name__ == "__main__":
-    # Example usage
-    D = 10  # Input dimensionality
-    d = 5  # True function dimensionality
-    num_samples = 100
-    func = random_function(D, d)
-
-    # Generate random data
-    X = np.random.rand(num_samples, D)
-    y = np.array([func(x) for x in X])
-
-    # Instantiate and train the GP model
-    gp_model = GaussianProcessModel(input_dim=D, learning_rate=0.1)
-    gp_model.fit(X, y, epochs=500)
-
-    # Predict on test data
-    num_test_samples = 100
-    test_X = np.random.rand(num_test_samples, D)
-
-    # Obtain predictions
-    predictions = gp_model.predict(test_X, return_std=True, return_confidence_region=True)
-
-    print("Predicted Mean:", predictions["mean"])
-    print("Predicted Standard Deviation:", predictions["std"])
-    print("Confidence Region (Lower, Upper):", predictions["confidence_region"])
+        K_star = self.rbf_kernel(X, self.X_train)
+        pred = K_star @ self.alpha
+        return pred
