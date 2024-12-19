@@ -107,7 +107,7 @@ class Experimenter:
             self.pnet_optimizer.step()
 
             # Print loss for the epoch
-            if (epoch + 1) % 10 == 0 or epoch == self.num_epochs - 1:
+            if (epoch + 1) % 50 == 0 or epoch == self.num_epochs - 1:
                 print(f"Epoch {epoch + 1}/{self.num_epochs} training loss: {epoch_loss:.4f}")
 
     def train(self):
@@ -128,9 +128,10 @@ class Experimenter:
         # Compute the singular values of the cross-correlation matrix
         # This gives the cosines of the principal angles
         S = torch.linalg.svdvals(C)
+        # print(S)
 
         # Take arccos of singular values, clamp to avoid numerical instability
         principal_angles_rad = torch.acos(torch.clamp(S, -1, 1))
 
         # Convert to degrees and return the maximum principal angle
-        return torch.rad2deg(torch.max(principal_angles_rad)).item(), found_dim
+        return torch.rad2deg(torch.mean(principal_angles_rad)).item(), found_dim

@@ -13,12 +13,17 @@ class OrthogonalParameterWithSoftRounding(nn.Module):
         self.diag = nn.Parameter(torch.randn(D))
 
     def forward(self, x):
-        # Apply sigmoid to make values between 0 and 1
+        # Apply sigmoid to get values between 0 and 1
         diag_soft = torch.sigmoid(self.diag)
 
-        # Optional: Make the soft rounding sharper by scaling sigmoid
-        sharpness = 10  # Increase for more aggressive rounding
-        diag_rounded = torch.sigmoid(sharpness * (diag_soft - 0.5))
+        # Increase sharpness for more aggressive rounding
+        # First stage of sharpening
+        sharpness1 = 50.0
+        diag_sharp = torch.sigmoid(sharpness1 * (diag_soft - 0.5))
+
+        # Second stage of sharpening (apply again to push even closer to 0 or 1)
+        sharpness2 = 50.0
+        diag_rounded = torch.sigmoid(sharpness2 * (diag_sharp - 0.5))
 
         # Construct the diagonal matrix A
         A = torch.diag(diag_rounded)
@@ -26,33 +31,30 @@ class OrthogonalParameterWithSoftRounding(nn.Module):
         # Get the orthogonal matrix U
         U = self.U_layer.weight
 
-        # Compute the matrix multiplication UAU*
+        # Compute UAU*
         UA = U @ A
-        UAU_star = UA @ U.T  # Equivalent to UAU*
+        UAU_star = UA @ U.T
 
         # Apply the projection matrix UAU* to the input vector
         return x @ UAU_star.T
     
     def get_basis(self):
-        # Round the diagonal to strictly 0 or 1
-        diag_binary = (torch.sigmoid(self.diag) > 0.5).float()
+        # Hard threshold: strictly binarize based on the current value
+        diag_binary = (torch.sigmoid(self.diag) > 0.6).float()
         
         # Find indices of non-zero columns
         non_zero_indices = torch.nonzero(diag_binary).squeeze()
-        if non_zero_indices.numel() < 2:  # Fewer than two non-zero columns
+        if non_zero_indices.numel() < 2:  # if fewer than two non-zero columns
             # Sort the diagonal in descending order
             sorted_indices = torch.argsort(self.diag, descending=True)
-            
-            # Select the top two indices with the largest diagonal values
+            # Select the top two indices
             top_two_indices = sorted_indices[:2]
-            
-            # Use the top two indices as the basis
             non_zero_indices = top_two_indices
+
         # Return only the non-zero columns of U
         return self.U_layer.weight[:, non_zero_indices]
 
 
-# Example neural network with the custom layer
 class ProjectionNetwork(nn.Module):
     def __init__(self, input_dim):
         super(ProjectionNetwork, self).__init__()
