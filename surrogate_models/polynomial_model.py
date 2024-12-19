@@ -15,7 +15,7 @@ class DifferentiablePolynomialFeatures(torch.nn.Module):
 
 
 class PolynomialRegressionModel:
-    def __init__(self, input_dim, poly_degree=2, learning_rate=0.1):
+    def __init__(self, input_dim, poly_degree=2, learning_rate=0.1, epochs=1000):
         self.poly_degree = poly_degree
         self.poly_transform = DifferentiablePolynomialFeatures(degree=self.poly_degree)
         self._poly_input_dim = input_dim * self.poly_degree  # Approximation for transformed dim
@@ -24,13 +24,14 @@ class PolynomialRegressionModel:
         self.model = torch.nn.Linear(self._poly_input_dim, 1)
         self.criterion = torch.nn.MSELoss()
         self.optimizer = torch.optim.Adam(self.model.parameters(), lr=learning_rate)
+        self.epochs = epochs
 
-    def fit(self, X, y, epochs=500, verbose=True):
+    def fit(self, X, y, verbose=True):
         # Convert data to tensors
         X_tensor = torch.tensor(X, dtype=torch.float)
         y_tensor = torch.tensor(y, dtype=torch.float).unsqueeze(-1)
 
-        for epoch in range(epochs):
+        for epoch in range(self.epochs):
             self.model.train()
             self.optimizer.zero_grad()
 
@@ -44,7 +45,7 @@ class PolynomialRegressionModel:
             self.optimizer.step()
 
             if verbose and (epoch + 1) % 50 == 0:
-                print(f"Epoch {epoch+1}/{epochs}, Loss: {loss.item():.4f}")
+                print(f"Epoch {epoch+1}/{self.epochs}, Loss: {loss.item():.4f}")
 
     def predict(self, X, requires_grad=True):
         # Convert data to tensors
@@ -68,7 +69,7 @@ if __name__ == "__main__":
 
     # Generate random data
     X = np.random.rand(num_samples, D)
-    y = np.array([func(x) for x in X])
+    y = np.array([func(x) for x in X]) # type: ignore
 
     # Instantiate and train the model
     model = PolynomialRegressionModel(input_dim=X.shape[1], poly_degree=2, learning_rate=0.1)

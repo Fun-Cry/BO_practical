@@ -11,8 +11,9 @@ class Experimenter:
                  surrogate_model,
                  num_DoE,
                  num_iters,
-                 num_samples=64,  # Default to one sample per iteration
-                 num_epochs=100    # Default to one epoch per iteration
+                 num_samples=1000,  # Default to one sample per iteration
+                 num_epochs=100,    # Default to one epoch per iteration
+                 lr=1e-2
                  ):
         self.dim_total = dim_total
         self.dim_effect = dim_effect
@@ -24,7 +25,7 @@ class Experimenter:
         self.num_epochs = num_epochs
         
         self.pnet = ProjectionNetwork(input_dim=dim_total)
-        self.pnet_optimizer = torch.optim.Adam(self.pnet.parameters(), lr=1e-2)
+        self.pnet_optimizer = torch.optim.Adam(self.pnet.parameters(), lr=lr)
         self.criterion = torch.nn.MSELoss()
 
 
@@ -37,7 +38,7 @@ class Experimenter:
         samples = lhs(self.dim_total, self.num_DoE)
         
         # Convert LHS samples to the range [0, 1]
-        samples = np.clip(samples, 0, 1)
+        samples = np.clip(samples, 0, 1) # type: ignore
 
         # Evaluate the function for each sample
         observations = np.array([self.function(sample) for sample in samples])
@@ -51,43 +52,59 @@ class Experimenter:
 
     def iterate(self):
         """
-        Perform one iteration of training the projection network.
+        Perform one iteration of training the projection network with batching.
 
         Steps:
         1. Randomly generate new points in the input space.
         2. Evaluate the surrogate model at the generated points.
-        3. Use the results to train the projection network (pnet) for a specified number of epochs.
+        3. Train the projection network (pnet) for a specified number of epochs using batches.
         """
-        for _ in range(self.num_epochs):
-            # Step 1: Randomly generate new points in the input space
-            random_points = np.random.rand(self.num_samples, self.dim_total)  # `num_samples` points in [0, 1]^dim_total
+        # Step 1: Randomly generate new points in the input space
+        random_points = np.random.rand(self.num_samples, self.dim_total)  # `num_samples` points in [0, 1]^dim_total
 
-            # Step 2: Evaluate the surrogate model at the random points
-            surrogate_values = self.surrogate_model.predict(random_points)  # Surrogate model predictions
+        # Define batch size
+        batch_size = 256  # Assume self.batch_size is defined elsewhere
+        num_batches = int(np.ceil(self.num_samples / batch_size))
 
-            # Step 3: Train the projection network
-            self.pnet_optimizer.zero_grad()
+        for epoch in range(self.num_epochs):
+            epoch_loss = 0.0  # To track the loss across batches
 
-            # Convert random_points to PyTorch tensor
-            random_points_tensor = torch.tensor(random_points, dtype=torch.float)
+            # Shuffle points for each epoch (optional)
+            indices = np.random.permutation(self.num_samples)
+            random_points_shuffled = random_points[indices]
 
-            # print(random_points_tensor.shape)
-            # Forward pass through the projection network
-            embeddings = self.pnet(random_points_tensor)
-            pnet_outputs = self.surrogate_model.predict(embeddings)
-            
+            for i in range(num_batches):
+                # Extract batch
+                start_idx = i * batch_size
+                end_idx = min(start_idx + batch_size, self.num_samples)
+                batch_points = random_points_shuffled[start_idx:end_idx]
 
-            # assert pnet_outputs_tensor.shape == surrogate_values_tensor.shape, f"p: {pnet_outputs_tensor.shape}, s: {surrogate_values_tensor.shape}"
-            # Loss is the squared error between the projection outputs and the surrogate model values
-            loss = self.criterion(pnet_outputs, surrogate_values)
-            # print(pnet_outputs.shape, surrogate_values_tensor.shape)
+                # Convert batch to tensor
+                batch_points_tensor = torch.tensor(batch_points, dtype=torch.float)
 
-            # Backward pass and optimization step
-            loss.backward()
-            self.pnet_optimizer.step()
+                # Compute embeddings and complements for the batch
+                embeddings = self.pnet(batch_points_tensor)
+                complements = self.pnet.complement_project(batch_points_tensor)
 
-            # Print loss (optional)
-            print(f"Epoch training loss: {loss.item():.4f}")
+                rand_k = torch.rand(len(batch_points), 1, dtype=torch.float)  # Shape (batch_size, 1)
+                embeddings_plus_complements = embeddings + complements * rand_k
+
+                # Step 2: Evaluate the surrogate model at the random points in the batch
+                embeddings_values = self.surrogate_model.predict(embeddings)
+                complements_values = self.surrogate_model.predict(embeddings_plus_complements)
+
+                # Compute loss for the batch
+                loss = self.criterion(embeddings_values, complements_values)
+                epoch_loss += loss.item()
+
+                # Backward pass and optimization step
+                self.pnet_optimizer.zero_grad()
+                loss.backward()
+                self.pnet_optimizer.step()
+
+            # Print loss for the epoch
+            print(f"Epoch {epoch + 1}/{self.num_epochs} training loss: {epoch_loss / num_batches:.4f}")
+
 
     def train(self):
         for _ in range(self.num_iters):

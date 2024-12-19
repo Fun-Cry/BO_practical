@@ -4,7 +4,7 @@ import numpy as np
 from utils.random_function import random_function
 
 class GaussianProcessModel:
-    def __init__(self, input_dim, learning_rate=0.1):
+    def __init__(self, input_dim, learning_rate=0.1, epochs=1000):
         """
         Initializes the Gaussian Process model.
 
@@ -17,8 +17,9 @@ class GaussianProcessModel:
         self.learning_rate = learning_rate
         self.optimizer = None
         self.mll = None
+        self.epochs = epochs 
 
-    def fit(self, X, y, epochs=1000, verbose=True):
+    def fit(self, X, y, verbose=True):
         """
         Train the Gaussian Process model.
 
@@ -39,15 +40,15 @@ class GaussianProcessModel:
         self.model.train()
         self.likelihood.train()
 
-        for epoch in range(epochs):
+        for epoch in range(self.epochs):
             self.optimizer.zero_grad()
             output = self.model(X_tensor)
-            loss = -self.mll(output, y_tensor)  # Marginal log likelihood
+            loss = -self.mll(output, y_tensor)  # type: ignore # Marginal log likelihood
             loss.backward()
             self.optimizer.step()
 
             if verbose and (epoch + 1) % 50 == 0:
-                print(f"Epoch {epoch + 1}/{epochs}, Loss: {loss.item():.4f}")
+                print(f"Epoch {epoch + 1}/{self.epochs}, Loss: {loss.item():.4f}")
 
     def predict(self, X, return_std=False, return_confidence_region=False):
         """

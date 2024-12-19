@@ -57,6 +57,9 @@ class ProjectionNetwork(nn.Module):
     def forward(self, x):
         return self.projection_layer(x)
     
+    def complement_project(self, x):
+        return x - self.projection_layer(x)
+    
     def get_basis(self):
         return self.projection_layer.get_basis()
 

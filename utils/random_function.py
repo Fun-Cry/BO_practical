@@ -56,7 +56,7 @@ def generate_random_equation(n):
             equation += var**power
         elif op in ['sin', 'cos', 'exp', 'log']:
             if op == 'log':  # Avoid log of negative or zero
-                equation += sp.log(var + random.uniform(1, 5))
+                equation += sp.log(var + random.uniform(1, 5)) # type: ignore
             else:
                 func = getattr(sp, op)
                 equation += func(var)

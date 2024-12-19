@@ -5,7 +5,7 @@ import numpy as np
 from utils.random_function import random_function
 
 class RBFNetwork:
-    def __init__(self, num_centers, input_dim, gamma=1.0, learning_rate=0.01):
+    def __init__(self, num_centers, input_dim, gamma=1.0, learning_rate=0.01, epochs=1000):
         """
         Initializes the RBF network.
 
@@ -18,8 +18,9 @@ class RBFNetwork:
         self.model = RBFNet(num_centers, input_dim, gamma)
         self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
         self.loss_fn = nn.MSELoss()
+        self.epochs = epochs
 
-    def fit(self, X, y, epochs=500, verbose=True):
+    def fit(self, X, y, verbose=True):
         """
         Train the RBF network.
 
@@ -32,7 +33,7 @@ class RBFNetwork:
         X_tensor = torch.tensor(X, dtype=torch.float)
         y_tensor = torch.tensor(y, dtype=torch.float).view(-1, 1)  # Ensure y is 2D
 
-        for epoch in range(epochs):
+        for epoch in range(self.epochs):
             self.optimizer.zero_grad()
             predictions = self.model(X_tensor)
             loss = self.loss_fn(predictions, y_tensor)
@@ -40,7 +41,7 @@ class RBFNetwork:
             self.optimizer.step()
 
             if verbose and (epoch + 1) % 50 == 0:
-                print(f"Epoch {epoch+1}/{epochs}, Loss: {loss.item():.4f}")
+                print(f"Epoch {epoch+1}/{self.epochs}, Loss: {loss.item():.4f}")
 
     def predict(self, X, requires_grad=True):
         """

@@ -1,0 +1,5 @@
+numpy
+gpytorch
+pyDOE
+pandas
+matplotlib
