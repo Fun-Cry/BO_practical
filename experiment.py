@@ -127,10 +127,10 @@ if __name__ == "__main__":
         20, 
         5, 
         GaussianProcessModel,
-        surrogate_lr=1e-2,
-        num_surrogate_epochs=100,
-        pnet_lr=1e-2,
-        num_pnet_epochs=100,
+        surrogate_lr=1e-1,
+        num_surrogate_epochs=10,
+        pnet_lr=1e-3,
+        num_pnet_epochs=10,
         num_runs=5
     )
 

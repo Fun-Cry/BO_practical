@@ -1,12 +1,13 @@
 import torch
 import torch.nn as nn
+from torch.nn.utils.parametrizations import orthogonal
 
 class OrthogonalParameterWithSoftRounding(nn.Module):
     def __init__(self, D):
         super(OrthogonalParameterWithSoftRounding, self).__init__()
-        # Initialize an orthogonal matrix U
-        self.U = nn.Parameter(torch.eye(D))  # Start with an identity matrix
-        # print(self.U)
+        # Create a linear layer to apply orthogonal parametrization
+        self.U_layer = nn.Linear(D, D, bias=False)
+        self.U_layer = orthogonal(self.U_layer)
         self.D = D
         # Initialize a D-dimensional array for the diagonal
         self.diag = nn.Parameter(torch.randn(D))
@@ -22,9 +23,12 @@ class OrthogonalParameterWithSoftRounding(nn.Module):
         # Construct the diagonal matrix A
         A = torch.diag(diag_rounded)
 
+        # Get the orthogonal matrix U
+        U = self.U_layer.weight
+
         # Compute the matrix multiplication UAU*
-        UA = self.U @ A
-        UAU_star = UA @ self.U.T  # Equivalent to UAU*
+        UA = U @ A
+        UAU_star = UA @ U.T  # Equivalent to UAU*
 
         # Apply the projection matrix UAU* to the input vector
         return x @ UAU_star.T
@@ -45,7 +49,7 @@ class OrthogonalParameterWithSoftRounding(nn.Module):
             # Use the top two indices as the basis
             non_zero_indices = top_two_indices
         # Return only the non-zero columns of U
-        return self.U[:, non_zero_indices]
+        return self.U_layer.weight[:, non_zero_indices]
 
 
 # Example neural network with the custom layer
@@ -63,16 +67,36 @@ class ProjectionNetwork(nn.Module):
     def get_basis(self):
         return self.projection_layer.get_basis()
 
+    def expand_to_problem_space(self, x):
+        # Get the basis vectors
+        basis = self.get_basis()
+
+        # Check if the input matches the basis dimension
+        if x.shape[1] != basis.shape[1]:
+            raise ValueError(f"Input dimension {x.shape[1]} does not match basis dimension {basis.shape[1]}.")
+
+        # Transform the lower-dimensional input to the problem space
+        return x @ basis.T
+
 
 if __name__ == "__main__":
     # Example usage
     D = 4  # Dimension of the matrix and vector
     model = ProjectionNetwork(D)
 
-    # Example input vector
+    # Example input vector in the original space
     x = torch.randn(1, D)
 
     # Forward pass
     output = model(x)
     print("Input:", x)
     print("Output:", output)
+
+    # Example lower-dimensional input vector
+    basis = model.get_basis()
+    lower_dim_vector = torch.randn(1, basis.shape[1])
+
+    # Expand to problem space
+    expanded_vector = model.expand_to_problem_space(lower_dim_vector)
+    print("Lower-dimensional vector:", lower_dim_vector)
+    print("Expanded vector:", expanded_vector)
