@@ -13,11 +13,19 @@ class Experimenter:
                  num_iters,
                  num_samples=1000,  # Default to one sample per iteration
                  num_epochs=100,    # Default to one epoch per iteration
-                 lr=1e-2
+                 lr=1e-2,
+                 toy=True,
+                 function=None
                  ):
+        self.toy=toy
         self.dim_total = dim_total
         self.dim_effect = dim_effect
-        self.equation, self.onb, self.function = random_function(dim_total, dim_effect)
+        if self.toy:
+            self.equation, self.onb, self.function = random_function(dim_total, dim_effect)
+        else:
+            assert function is not None, 'have to initialize function if not doing toy experiment'
+            self.function = function
+            
         self.surrogate_model = surrogate_model
         self.num_DoE = num_DoE
         self.num_iters = num_iters
@@ -113,6 +121,10 @@ class Experimenter:
     def principal_angle(self):
         found_basis = self.pnet.get_basis()
         found_dim = found_basis.shape[1]
+        
+        if not self.toy:
+            return None, found_dim
+        
         true_basis = torch.tensor(self.onb, dtype=torch.float)
         
         # Compute the cross-correlation matrix
