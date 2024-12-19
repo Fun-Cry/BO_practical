@@ -7,10 +7,10 @@ import torch
 class Experimenter:
     def __init__(self,
                  dim_total,
-                 dim_effect,
                  surrogate_model,
                  num_DoE,
                  num_iters,
+                 dim_effect=None,
                  num_samples=1000,  # Default to one sample per iteration
                  num_epochs=100,    # Default to one epoch per iteration
                  lr=1e-2,
@@ -19,8 +19,9 @@ class Experimenter:
                  ):
         self.toy=toy
         self.dim_total = dim_total
-        self.dim_effect = dim_effect
         if self.toy:
+            assert dim_effect is not None, 'have to specify effective dimension when doing toy experiment'
+            self.dim_effect = dim_effect
             self.equation, self.onb, self.function = random_function(dim_total, dim_effect)
         else:
             assert function is not None, 'have to initialize function if not doing toy experiment'
@@ -124,7 +125,6 @@ class Experimenter:
         
         if not self.toy:
             return None, found_dim
-        
         true_basis = torch.tensor(self.onb, dtype=torch.float)
         
         # Compute the cross-correlation matrix
