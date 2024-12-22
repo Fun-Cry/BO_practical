@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 class PolynomialRegressionModel(nn.Module):
-    def __init__(self, poly_degree=2, learning_rate=1e-2, epochs=500, input_dim=None):
+    def __init__(self, poly_degree=3, learning_rate=1e-2, epochs=500, input_dim=None):
         super().__init__()
         assert input_dim is not None, "input_dim must be specified for PolynomialRegressionModel"
         self.poly_degree = poly_degree

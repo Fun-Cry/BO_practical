@@ -34,8 +34,8 @@ class RBFNetwork(nn.Module):
         # Compute RBF features
         Phi = self._rbf_features(X_t, centers)  # N x C
 
-        # Solve linear system: w = (Phi^T Phi)^{-1} Phi^T y
-        A = Phi.T @ Phi
+        # Add regularization to ensure numerical stability
+        A = Phi.T @ Phi + torch.eye(Phi.size(1)) * 1e-6  # Regularization term
         b = Phi.T @ y_t
         w = torch.linalg.solve(A, b)  # C x 1
 
