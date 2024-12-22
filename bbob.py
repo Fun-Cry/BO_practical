@@ -1,39 +1,21 @@
-from experiment import Experimenter
-import numpy as np
-import itertools
-from surrogate_models.gpr_model import GaussianProcessModel
-from surrogate_models.polynomial_model import PolynomialRegressionModel
-from surrogate_models.rbf_model import RBFNetwork
-from utils.experimenter import Experimenter
-import random
-import cocoex
+from ioh import Experiment, ProblemClass
+from utils.PBO import PBO
 
-# Initialize a suite
-suite_name = "bbob"  # You can also use "bbob-biobj" for multi-objective problems
-suite = cocoex.Suite(suite_name, "", "")
+# Experimental setup
+functions = [1, 8, 12, 15, 21]  # Function IDs for BBOB
+instances = [1, 2, 3]           # Instance IDs
+dimensions = [2, 10, 40, 100]   # Problem dimensions
+repetitions = 5                 # Number of repetitions per setup
 
-problem_index = 23
-problem = suite.get_problem(problem_index)
+# Initialize the experiment
+experiment = Experiment(
+    algorithm=PBO(),
+    fids=functions,
+    iids=instances,
+    dims=dimensions,
+    problem_class=ProblemClass.BBOB,
+    reps=repetitions
+)
 
-dim_total = 20
-dim_effect = 5
-surrogate_model_class = GaussianProcessModel(input_dim=problem.dimension)
-
-experimenter = Experimenter(
-        dim_total=problem.dimension,
-        dim_effect=dim_effect,
-        surrogate_model=surrogate_model_class, # type: ignore
-        num_DoE=100,
-        num_iters=10,
-        num_samples=1000,
-        num_epochs=1000,
-        lr=1e-3, 
-        toy=False,
-        function=problem
-    )
-
-    # Run the experiment
-experimenter.initialize_surrogate()
-experimenter.train()
-
-principal_angle, found_dim = experimenter.principal_angle()
+# Run the experiment
+experiment.run()

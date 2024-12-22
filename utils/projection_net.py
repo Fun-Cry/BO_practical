@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.nn.utils.parametrizations import orthogonal
+import numpy as np
 
 class OrthogonalParameterWithSoftRounding(nn.Module):
     def __init__(self, D):
@@ -69,16 +70,30 @@ class ProjectionNetwork(nn.Module):
     def get_basis(self):
         return self.projection_layer.get_basis()
 
-    def expand_to_problem_space(self, x):
+    def lower_to_higher(self, x):
         # Get the basis vectors
-        basis = self.get_basis()
-
+        basis = self.get_basis().detach().numpy()
+        if len(x.shape) == 1:
+            x = np.expand_dims(x, 0)
         # Check if the input matches the basis dimension
         if x.shape[1] != basis.shape[1]:
             raise ValueError(f"Input dimension {x.shape[1]} does not match basis dimension {basis.shape[1]}.")
 
         # Transform the lower-dimensional input to the problem space
         return x @ basis.T
+    
+    def higher_to_lower(self, x):
+        # Get the basis vectors
+        basis = self.get_basis().detach().numpy()
+        # Check if the input matches the basis dimension
+        if len(x.shape) == 1:
+            x = np.expand_dims(x, 0)
+        if x.shape[1] != basis.shape[0]:
+            raise ValueError(f"Input dimension {x.shape[1]} does not match basis dimension {basis.shape[1]}.")
+
+        # Transform the lower-dimensional input to the problem space
+        return x @ basis
+    
 
 
 if __name__ == "__main__":
