@@ -10,10 +10,8 @@ import cocoex
 
 # Initialize a suite
 suite_name = "bbob" 
-# Initialize a BBOB suite and filter problems by dimension
 suite = cocoex.Suite("bbob", "", "")
 
-# Desired dimension (e.g., 50)
 desired_dimension = 40
 
 # Select a specific problem
