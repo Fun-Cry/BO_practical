@@ -1,7 +1,7 @@
 from experiment import Experimenter
 import numpy as np
 import itertools
-from surrogate_models.gpr_model import GaussianProcessModel
+from surrogate_models.gpr_model import GPRSurrogate
 from surrogate_models.polynomial_model import PolynomialRegressionModel
 from surrogate_models.rbf_model import RBFNetwork
 from utils.experimenter import Experimenter
@@ -9,15 +9,25 @@ import random
 import cocoex
 
 # Initialize a suite
-suite_name = "bbob"  # You can also use "bbob-biobj" for multi-objective problems
-suite = cocoex.Suite(suite_name, "", "")
+suite_name = "bbob" 
+# Initialize a BBOB suite and filter problems by dimension
+suite = cocoex.Suite("bbob", "", "")
 
-problem_index = 23
-problem = suite.get_problem(problem_index)
+# Desired dimension (e.g., 50)
+desired_dimension = 40
+
+# Select a specific problem
+selected_problem = None
+
+for problem in suite:
+    if problem.dimension == desired_dimension:
+        selected_problem = problem
+        print(f"Selected Problem ID: {problem.id}, Dimension: {problem.dimension}")
+        break  # Stop after finding the first match
 
 dim_total = 20
 dim_effect = 5
-surrogate_model_class = GaussianProcessModel(input_dim=problem.dimension)
+surrogate_model_class = GPRSurrogate()
 
 experimenter = Experimenter(
         dim_total=problem.dimension,
@@ -29,7 +39,7 @@ experimenter = Experimenter(
         num_epochs=1000,
         lr=1e-3, 
         toy=False,
-        function=problem
+        function=selected_problem
     )
 
     # Run the experiment
