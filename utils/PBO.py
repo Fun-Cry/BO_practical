@@ -7,13 +7,13 @@ from surrogate_models.gpr_model import GPRSurrogate
 from scipy.stats import norm 
 
 class PBO:
-    def __init__(self, budget_multiplier=5):
+    def __init__(self, budget_multiplier=10):
         self.budget_multiplier = budget_multiplier
 
     def train_pnet(self, problem):
         surrogate_model = GPRSurrogate()
         experiment_config = {
-            'num_DoE': problem.meta_data.n_variables * 5,
+            'num_DoE': 50,
             'num_iters': 10,
             'num_samples': 100,
             'num_epochs': 200,
